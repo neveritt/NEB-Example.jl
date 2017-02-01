@@ -20,6 +20,7 @@ function _initial_two_stage{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oem
   n, m, nᵤ, nᵣ, N = orders
   nₛ = nᵤ*nᵣ
   fir_m = firmodel.orders.nb[1]
+  nk = firmodel.orders.nk
 
   Θ    = zeros(nₛ*fir_m + nᵤ*2m + nᵤ+1)
   ϴfir = view(Θ,1:nₛ*fir_m)
@@ -33,7 +34,7 @@ function _initial_two_stage{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oem
     A,B,F,C,D,info = IdentificationToolbox.pem(zdata,firmodel,zeros(T,nᵣ*fir_m),options)
     for j = 0:nᵣ-1
       i = nᵣ*k + j
-      ϴfir[i*fir_m+(1:fir_m)] = Polynomials.coeffs(B[j+1])[2:fir_m+1]
+      ϴfir[i*fir_m+(1:fir_m)] = Polynomials.coeffs(B[j+1])[nk[j+1]+1:fir_m+nk[j+1]]
     end
     ϴσ[k+1] = info.mse[1]
     û[k+1:k+1,:] += filt(B,F,r)
