@@ -1,20 +1,23 @@
-N = 200
-MC = 100
-nᵤ = 2
+N = 100
+MC = 21
+nᵤ = 1
 n = 50
-m = 3
-nsr = 0.1
+m = 2
+nsr = 1.0
 
-x = read("results-$(nᵤ*m)-$(MC)-N$(N)-n$(n)-nsr$(nsr).dat",
+x = read("results-CL-$(nᵤ*m)-$(MC)-N$(N)-n$(n)-nsr$(nsr).dat",
   Float64, (nᵤ*m,MC))
 
-twostagefit = x[1:2,:]
-nebfit      = x[3:4,:]
+twostagefit = x[1:1,:]
+nebfit      = x[2:2,:]
 nebxfit     = x[5:6,:]
 
-avnebfit      = mean(nebfit[2,:])
-avnebxfit     = mean(filter(x-> x>0.94,nebxfit[2,:]))
-avtwostagefit = mean(twostagefit[2,:])
+avnebfit      = mean(nebfit[1,:])
+avnebxfit     = mean(nebxfit[1,:])
+avtwostagefit = mean(twostagefit[1,:])
+
+minimum(nebfit[1,:])
+minimum(twostagefit[1,:])
 
 using Plots
 using Colors
@@ -53,9 +56,9 @@ scatter(x[[2,4],:].',twostagefit[2:2,:].',
     ylims=(0.7,1.01maxy),
     linestyle = :dot)
 
-scatter(x[1:1,:].',x[3:3,:].',
-        xlims=(0.70,1.01maxy),
-        ylims=(0.70,1.01maxy),
+scatter(x[1:1,:].',x[2:2,:].',
+        xlims=(0.95,1.01maxy),
+        ylims=(0.95,1.01maxy),
         linestyle = :dot)
 plot!(0.96:0.01:1.0,0.96:0.01:1.0)
 
@@ -80,16 +83,13 @@ using StatPlots
 using DataFrames
 using LaTeXStrings
 
-Fit = vcat(nebfit[1,:], nebxfit[1,:], twostagef[1,:])
+Fit = vcat(nebfit[1,:], twostagefit[1,:])
 
 idmethods = [L"neb"]
 for i = 1:MC-1
   push!(idmethods,L"neb")
 end
-for i = 1:MC
-  push!(idmethods,L"nebx")
-end
-for i = 1:length(twostagef[2,:])
+for i = 1:length(twostagefit[1,:])
   push!(idmethods,L"smpe")
 end
 idmethods
@@ -100,7 +100,7 @@ df = DataFrame(method = idmethods,
 twostagefit[1,:]
 
 violin(df,:method,:fit,marker=(0.2,stroke(0)),alpha=0.6, lab="")
-boxplot!(df,:method,:fit,marker=(3,stroke(2)),color=5,alpha=0.6, lab="", ylims=(clip,1))
+boxplot!(df,:method,:fit,marker=(3,stroke(2)),color=5,alpha=0.6, lab="")
 
 
 df2 = DataFrame(method = [L"smpe"], fit = [0.1])
@@ -117,8 +117,8 @@ immutable Boxplot{T}
 end
 
 nzerostwo = MC-size(twostagef,2)
-twodata1 = Boxplot(twostagef[1,:])()
-twodata2 = Boxplot(twostagef[2,:])()
+twodata1 = Boxplot(twostagefit[1,:])()
+twodata2 = Boxplot(twostagefit[2,:])()
 twodata  = Boxplot((twostagef[1,:]+twostagef[2,:])/2)()
 append!(twodata1[2],clip*ones(nzerostwo))
 append!(twodata2[2],clip*ones(nzerostwo))
@@ -140,13 +140,26 @@ tikzfigureout("nebx-1.txt", nebxdata1)
 tikzfigureout("nebx-2.txt", nebxdata2)
 tikzfigureout("nebx.txt", nebxdata)
 
-writecsv("nebvsnebx.csv", vcat(nebfit[1:1,:],nebxfit[1:1,:]).')
+writecsv("twovsnebcl.csv", vcat(twostagefit[1:1,:],nebfit[1:1,:]).')
+writecsv("smpecl.csv", transpose(twostagefit[1:1,:]))
+writecsv("nebcl.csv", transpose(nebfit[1:1,:]))
+
+writecsv("smpenl1.csv", transpose(twostagefit[1:1,:]))
+writecsv("smpenl2.csv", transpose(twostagefit[2:2,:]))
+writecsv("nebnl1.csv", transpose(nebfit[1:1,:]))
+writecsv("nebnl2.csv", transpose(nebfit[2:2,:]))
+writecsv("nebxnl1.csv", transpose(nebxfit[1:1,:]))
+writecsv("nebxnl2.csv", transpose(nebxfit[2:2,:]))
+writecsv("twovsneb.csv", vcat(twostagefit[1:1,:],nebfit[1:1,:]).')
+writecsv("twovsnebx.csv", vcat(twostagefit[1:1,:],nebxfit[1:1,:]).')
+writecsv("twovsneb2.csv", vcat(twostagefit[2:2,:],nebfit[2:2,:]).')
+writecsv("twovsnebx2.csv", vcat(twostagefit[2:2,:],nebxfit[2:2,:]).')
 
 function tikzfigureout(s, bdata)
   d, o = bdata
   open(s, "w") do f
     write(f, "\\addplot\n")
-    write(f, "  +[boxplot prepared={\n")
+    write(f, "  [boxplot prepared={\n")
     write(f, "    lower whisker=$(d[1]),\n")
     write(f, "    lower quartile=$(d[2]),\n")
     write(f, "    median=$(d[3]),\n")

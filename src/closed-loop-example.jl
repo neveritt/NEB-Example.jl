@@ -12,17 +12,17 @@ import NetworkEmpiricalBayes.impulse
 
 @everywhere include("two-stage.jl")
 
-N  = 200
+N  = 100
 Ts = 1.0
 m  = 2
 nᵤ = 1
 nᵣ = 1
 nₛ = nᵣ*nᵤ
-n = 50
+n = 100
 
-Θ₀ = [.4, 1, -0.4, 0.6]
+Θ₀ = [.2, 0.3, 0.5, 0.15]
 Θ₂ = [0.4, -0.5, 0.5, 0.2]
-nsru = nsry = 0.1
+nsru = nsry = 1.0
 
 @everywhere function _create_data(N,m,nsru,nsry,Θ₀,Θ₂)
   b1 = vcat(0.0, Θ₀[1:m])
@@ -49,15 +49,15 @@ firmodel = FIR(fir_m*ones(Int,1,nᵣ),0*ones(Int,1,nᵣ), 1, nᵣ)
 options = IdOptions(iterations = 100, autodiff=true, estimate_initial=false)
 oemodel = OE(m*ones(Int,1,nᵤ), m*ones(Int,1,nᵤ), ones(Int,1,nᵤ), 1, nᵤ)
 
-MC = 3
+MC = 100
 nebres  = SharedArray(Float64, (2m*nᵤ, MC))
 twostageres = SharedArray(Float64, (2m*nᵤ, MC))
 @sync @parallel for i = 1:MC
   y,u,r,y0,u2 = _create_data(N,m,nsru,nsry,Θ₀,Θ₂)
 
   z = vcat(y[1:1,:],u)
-  data = iddata(z,r)
-  NEBtrace, zₛ = NetworkEmpiricalBayes.neb(data, n, m; outputidx=1, options=neboptions)
+  zdata = iddata(z,r)
+  NEBtrace, zₛ = NetworkEmpiricalBayes.neb(zdata, n, m; outputidx=1, options=neboptions)
   nebres[:,i] = last(NEBtrace).Θ
 
   xfir, xG, xσ = two_stage(y[1:1,:],u,r,Ts,orders, firmodel, oemodel, options)
@@ -84,4 +84,4 @@ end
 
 # save results
 res = vcat(1-twostagefit,1-nebfit)
-write("results-CL-$(size(res,1))-$(size(res,2))-N$(N)-nsr$(nsru).dat", res)
+write("results-CL-$(size(res,1))-$(size(res,2))-N$(N)-n$(n)-nsr$(nsru).dat", res)

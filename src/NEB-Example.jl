@@ -84,4 +84,20 @@ end
 
 # save results
 res = vcat(1-twostagefit,1-nebfit,1-nebxfit)
-write("results-$(size(res,1))-$(size(res,2))-N$(N)-nsr$(nsru).dat", res)
+write("results-$(size(res,1))-$(size(res,2))-N$(N)-n$(n)-nsr$(nsru).dat", res)
+
+
+i = 1
+y,u,r,y0,u2 = _create_data(N,m,nᵤ,nᵣ,s0,nsru,nsry,nsry2,Θ₀,Θ₂)
+using BenchmarkTools
+z = vcat(y[1:1,:],u)
+data = iddata(z,r)
+@benchmark NEBtrace, zₛ = NetworkEmpiricalBayes.neb(data, n, m; outputidx=1, options=neboptions)
+nebres[:,i] = last(NEBtrace).Θ
+
+@time NEBXtrace, z = NetworkEmpiricalBayes.nebx(y[1:1,:],u,r,y[2:2,:]- r[2:2,:], orders, Ts; options=nebxoptions)
+nebxres[:,i] = last(NEBXtrace).Θ
+
+@time xfir, xG, xσ = two_stage(y[1:1,:],u,r,Ts,orders, firmodel, oemodel, options)
+A,B,F,C,D = IdentificationToolbox._getpolys(oemodel, xG[:])
+twostageres[:,i] = vcat(coeffs(B[1])[2:1+m], coeffs(F[1])[2:1+m], coeffs(B[2])[2:1+m], coeffs(F[2])[2:1+m])

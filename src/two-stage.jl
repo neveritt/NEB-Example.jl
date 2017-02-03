@@ -40,21 +40,11 @@ function _initial_two_stage{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oem
     û[k+1:k+1,:] += filt(B,F,r)
   end
 
-  # initialization for OE
-  options = IdentificationToolbox.IdOptions(iterations = 20, autodiff=true, estimate_initial=false)
-  model   = IdentificationToolbox.ARX(m,m,ones(Int,nᵤ),1,nᵤ)
-  zdata   = IdentificationToolbox.iddata(y[1:1,:], û, Ts)
-  s       = IdentificationToolbox.arx(zdata,model,options)
-  for i in 1:nᵤ
-    ΘG[(i-1)*m+(1:m)]      = Polynomials.coeffs(s.B[i])[2:m+1]
-    ΘG[nᵤ*m+(i-1)*m+(1:m)] = Polynomials.coeffs(s.A[1])[2:m+1]
-  end
-
-  # OE model
-  oemodel = IdentificationToolbox.OE(m*ones(Int,1,nᵤ), m*ones(Int,1,nᵤ), ones(Int,1,nᵤ), 1, nᵤ)
-  A,B,F,C,D,info = IdentificationToolbox.pem(zdata, oemodel, ΘG[:], options)
-  ΘG[:]   = info.opt.minimizer
-  ϴσ[end] = info.mse[1]
+  zdata   = iddata(y, û, Ts)
+  options = IdOptions(iterations = 20, autodiff=true, estimate_initial=false)
+  OEmodel = OE(m*ones(Int,1,nᵤ), m*ones(Int,1,nᵤ), ones(Int,1,nᵤ), 1, nᵤ)
+  ΘG[:],_ = IdentificationToolbox._morsm(zdata, OEmodel, options)
+  ϴσ[end] = IdentificationToolbox._mse(zdata, OEmodel, Θ, options)[1]
 
   return Θ
 end
