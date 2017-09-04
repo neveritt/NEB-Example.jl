@@ -1,6 +1,4 @@
-cd("../NEB-Example.jl/src/")
-
-addprocs(3)
+addprocs(25)
 
 # Import functions for overloading
 using DataFrames
@@ -10,9 +8,9 @@ using NetworkEmpiricalBayes
 using IdentificationToolbox
 import NetworkEmpiricalBayes.impulse
 
-@everywhere include("two-stage.jl")
+@everywhere include("smpe.jl")
 
-N  = 100
+N  = 200
 Ts = 1.0
 m  = 2
 nᵤ = 1
@@ -51,7 +49,7 @@ oemodel = OE(m*ones(Int,1,nᵤ), m*ones(Int,1,nᵤ), ones(Int,1,nᵤ), 1, nᵤ)
 
 MC = 100
 nebres  = SharedArray(Float64, (2m*nᵤ, MC))
-twostageres = SharedArray(Float64, (2m*nᵤ, MC))
+smperes = SharedArray(Float64, (2m*nᵤ, MC))
 @sync @parallel for i = 1:MC
   y,u,r,y0,u2 = _create_data(N,m,nsru,nsry,Θ₀,Θ₂)
 
@@ -60,13 +58,13 @@ twostageres = SharedArray(Float64, (2m*nᵤ, MC))
   NEBtrace, zₛ = NetworkEmpiricalBayes.neb(zdata, n, m; outputidx=1, options=neboptions)
   nebres[:,i] = last(NEBtrace).Θ
 
-  xfir, xG, xσ = two_stage(y[1:1,:],u,r,Ts,orders, firmodel, oemodel, options)
+  xfir, xG, xσ, opt = smpe(y[1:1,:],u,r,Ts,orders, firmodel, oemodel, options)
   A,B,F,C,D = IdentificationToolbox._getpolys(oemodel, xG[:])
-  twostageres[:,i] = vcat(coeffs(B[1])[2:1+m], coeffs(F[1])[2:1+m])
+  smperes[:,i] = vcat(coeffs(B[1])[2:1+m], coeffs(F[1])[2:1+m])
 end
 
-nebfit      = zeros(nᵤ,MC)
-twostagefit = zeros(nᵤ,MC)
+nebfit  = zeros(nᵤ,MC)
+smpefit = zeros(nᵤ,MC)
 
 impulseg(Θ,m::Int,Ts,N::Int) = impulse(vcat(zeros(1), Θ[1:m]),vcat(ones(1), Θ[m+1:2m]),Ts,N)
 
@@ -79,9 +77,10 @@ end
 for i in 1:MC
   # evaluate
   nebfit[1,i]      += fitg(Θ₀[1:2m],nebres[1:2m,i],m,Ts,N)
-  twostagefit[1,i] += fitg(Θ₀[1:2m],twostageres[1:2m,i],m,Ts,N)
+  smpefit[1,i] += fitg(Θ₀[1:2m],smperes[1:2m,i],m,Ts,N)
 end
 
 # save results
-res = vcat(1-twostagefit,1-nebfit)
+res = vcat(1-smpefit,1-nebfit)
 write("results-CL-$(size(res,1))-$(size(res,2))-N$(N)-n$(n)-nsr$(nsru).dat", res)
+write("theta-CL-$(size(res,1))-$(size(res,2))-N$(N)-n$(n)-nsr$(nsru).dat", hcat(smperes,nebres))

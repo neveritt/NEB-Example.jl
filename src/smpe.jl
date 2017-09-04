@@ -1,22 +1,30 @@
-function two_stage{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oemodel, options)
+function smpe{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oemodel, options)
   size(y,1) == 1 || throw(DomainError())
   n, m, nᵤ, nᵣ, N = orders
   nₛ    = nᵤ*nᵣ
   fir_m = firmodel.orders.nb[1]
 
-  Θ   = _initial_two_stage(y,u,r,Ts,orders, firmodel, oemodel, options)
-  opt = Optim.optimize(x->cost_twostage(y,u,r,Ts, x, orders, firmodel, oemodel, options),
-        Θ, Optim.Newton(), options.OptimizationOptions)
+  Θ = _initial_smpe(y,u,r,Ts,orders, firmodel, oemodel, options)
+  xinit = copy(Θ)
+  x     = Θ
+  local opt::Optim.OptimizationResults
+  try
+    opt = Optim.optimize(x->cost_smpe(y,u,r,Ts, x, orders, firmodel, oemodel, options),
+          Θ, Optim.Newton(;linesearch = LineSearches.morethuente!), options.OptimizationOptions)
+    x = opt.minimizer
+  catch y
+    println("failed")
+    println(y)
+  end
 
-  x    = opt.minimizer
   xfir = view(x,1:nₛ*fir_m)
   xG   = view(x,nₛ*fir_m+(1:nᵤ*2m))
   xσ   = view(x,nₛ*fir_m+nᵤ*2m+(1:nᵤ))
 
-  return xfir, xG, xσ
+  return xfir, xG, xσ, opt, xinit
 end
 
-function _initial_two_stage{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oemodel, options)
+function _initial_smpe{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oemodel, options)
   n, m, nᵤ, nᵣ, N = orders
   nₛ = nᵤ*nᵣ
   fir_m = firmodel.orders.nb[1]
@@ -40,16 +48,18 @@ function _initial_two_stage{T}(y::AbstractMatrix{T},u,r,Ts,orders, firmodel, oem
     û[k+1:k+1,:] += filt(B,F,r)
   end
 
-  zdata   = iddata(y, û, Ts)
-  options = IdOptions(iterations = 20, autodiff=true, estimate_initial=false)
-  OEmodel = OE(m*ones(Int,1,nᵤ), m*ones(Int,1,nᵤ), ones(Int,1,nᵤ), 1, nᵤ)
+  zdata   = IdentificationToolbox.iddata(y, û, Ts)
+  options = IdentificationToolbox.IdOptions(iterations = 20, autodiff=:forward, estimate_initial=false)
+  OEmodel = IdentificationToolbox.OE(m*ones(Int,1,nᵤ), m*ones(Int,1,nᵤ), ones(Int,1,nᵤ), 1, nᵤ)
   ΘG[:],_ = IdentificationToolbox._morsm(zdata, OEmodel, options)
-  ϴσ[end] = IdentificationToolbox._mse(zdata, OEmodel, Θ, options)[1]
+  A,B,F,C,D,info = pem(zdata, OEmodel, ΘG[:], options)
+  ΘG[:]   = info.opt.minimizer
+  ϴσ[end] = info.mse[1]
 
   return Θ
 end
 
-function cost_twostage{T}(y,u,r,Ts, x::AbstractVector{T}, orders, firmodel, oemodel, options)
+function cost_smpe{T}(y,u,r,Ts, x::AbstractVector{T}, orders, firmodel, oemodel, options)
   n, m, nᵤ, nᵣ, N = orders
   nₛ = nᵤ*nᵣ
   fir_m = firmodel.orders.nb[1]
